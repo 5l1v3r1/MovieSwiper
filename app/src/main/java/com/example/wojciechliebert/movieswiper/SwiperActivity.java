@@ -1,30 +1,22 @@
 package com.example.wojciechliebert.movieswiper;
 
 import android.graphics.Bitmap;
-import android.graphics.Color;
-import android.media.MediaMetadataRetriever;
-import android.net.Uri;
-import android.os.SystemClock;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
-import android.support.v7.widget.LinearLayoutManager;
+import android.os.Handler;
+import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.RecyclerView;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.ImageView;
-import android.widget.MediaController;
 import android.widget.TextView;
 import android.widget.VideoView;
 
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.GlideBuilder;
 import com.bumptech.glide.RequestManager;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.request.RequestOptions;
-import com.example.wojciechliebert.movieswiper.Adapters.SwiperAdapter;
 
 import java.io.File;
-import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 
@@ -44,10 +36,10 @@ public class SwiperActivity extends AppCompatActivity {
     VideoView videoView;
 
     @BindView(R.id.swiper_img)
-    ImageView imageView;
+    ImageView mImageView;
 
     FFmpegMediaMetadataRetriever metadataRetriever;
-    long current;
+    long mCurrent;
 
     RequestManager glide;
     private RequestOptions requestOptions;
@@ -58,6 +50,7 @@ public class SwiperActivity extends AppCompatActivity {
         setContentView(R.layout.activity_swiper);
 
         ButterKnife.bind(this);
+//        mImageView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
         glide = Glide.with(this);
         requestOptions = new RequestOptions();
@@ -150,8 +143,8 @@ public class SwiperActivity extends AppCompatActivity {
 
     private float mX, mY;
     private static long delta = 5_000;
-    private static float TOUCH_TOLERANCE = 5.0f;
-    private static float MNOZNIK = 1000f;
+    private static float TOUCH_TOLERANCE = 0.5f;
+    private static float SPEED = 1000f;
 
     private void touch_start(float x, float y) {
         mX = x;
@@ -162,7 +155,7 @@ public class SwiperActivity extends AppCompatActivity {
         float dy = Math.abs(y - mY);
         if (dx >= TOUCH_TOLERANCE || dy >= TOUCH_TOLERANCE) {
             long d = delta;
-            d = (long)((((MNOZNIK * dx)/d)+1) * d);
+            d = (long)((((SPEED * dx)/d)+1) * d);
             if (x >= mX) {
                 // moving finger to right
                 d = -d;
@@ -171,17 +164,23 @@ public class SwiperActivity extends AppCompatActivity {
                 // OK
             }
             d = d/100*100;
-            Bitmap bitmap = metadataRetriever.getFrameAtTime(current + d,
-                   FFmpegMediaMetadataRetriever.OPTION_CLOSEST);
-            if (bitmap != null) {
-                imageView.setImageBitmap(bitmap);
-//                glide.asBitmap().load(bitmap)
-//                        .apply(requestOptions)
-//                        .into(imageView);
-                current += d;
-            }
+            showFrameAt(d);
             mX = x;
             mY = y;
+        }
+    }
+
+    private void showFrameAt(final long d) {
+        Bitmap bitmap = metadataRetriever.getFrameAtTime(mCurrent + d,
+               FFmpegMediaMetadataRetriever.OPTION_CLOSEST);
+        if (bitmap != null) {
+            mImageView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+            mImageView.setImageBitmap(bitmap);
+//                glide.asBitmap().load(bitmap)
+//                        .apply(requestOptions)
+//                        .into(mImageView);
+            mCurrent += d;
+            new Handler(getMainLooper()).post(() -> mImageView.setLayerType(View.LAYER_TYPE_NONE, null));
         }
     }
 
