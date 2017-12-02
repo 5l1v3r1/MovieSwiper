@@ -17,7 +17,7 @@ public class Utils {
 
         do {
             resID = context.getResources()
-                    .getIdentifier("room" + String.format("2110%3d", imgnum),
+                    .getIdentifier("out" + String.format("2110%03d", imgnum),
                             "drawable", context.getPackageName());
             if (resID != 0){
                 images.add(resID);
