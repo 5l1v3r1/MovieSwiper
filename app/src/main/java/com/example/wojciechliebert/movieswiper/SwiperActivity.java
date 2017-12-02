@@ -3,18 +3,17 @@ package com.example.wojciechliebert.movieswiper;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.Handler;
+import android.support.v4.view.GestureDetectorCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
+import android.util.LruCache;
+import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.VideoView;
-
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.RequestManager;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.request.RequestOptions;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -41,8 +40,9 @@ public class SwiperActivity extends AppCompatActivity {
     FFmpegMediaMetadataRetriever metadataRetriever;
     long mCurrent;
 
-    RequestManager glide;
-    private RequestOptions requestOptions;
+    private GestureDetectorCompat mDetector;
+
+    private LruCache<Long, Bitmap> mCache;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,34 +50,9 @@ public class SwiperActivity extends AppCompatActivity {
         setContentView(R.layout.activity_swiper);
 
         ButterKnife.bind(this);
-//        mImageView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
-        glide = Glide.with(this);
-        requestOptions = new RequestOptions();
-        requestOptions.diskCacheStrategy(DiskCacheStrategy.ALL);
-
-//        final LinearLayoutManager linearLayoutManager = new LinearLayoutManager(this);
-//        linearLayoutManager.setOrientation(LinearLayoutManager.HORIZONTAL);
-//        swiperRv.setLayoutManager(linearLayoutManager);
-//        swiperRv.setAdapter(new SwiperAdapter(this, Utils.getImagesIdentifiers(this)));
-//        swiperRv.setHasFixedSize(true);
-//        swiperRv.setItemViewCacheSize(50);
-//        swiperRv.setDrawingCacheEnabled(true);
-//        swiperRv.setDrawingCacheQuality(View.DRAWING_CACHE_QUALITY_HIGH);
-//        swiperRv.addOnScrollListener(new RecyclerView.OnScrollListener() {
-//            @Override
-//            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
-//                recyclerView.getLayoutManager().fin
-//                super.onScrolled(recyclerView, dx, dy);
-//            }
-//        });
-//        Uri video_uri = Uri.parse(r);
-//        videoView.setMediaController(new MediaController(this));
-//        videoView.setVideoURI(Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.out1));
-//        videoView.seekTo(100);
-//        videoView.start();
-//        videoView.setBackgroundColor(Color.TRANSPARENT);
-//        videoView.setZOrderOnTop(true);
+        mDetector = new GestureDetectorCompat(this, new MyGestureListener());
+        mCache = new LruCache<Long, Bitmap>(500);
 
         File f = new File(getCacheDir()+"/out1.mp4");
         if (!f.exists()) try {
@@ -97,6 +72,13 @@ public class SwiperActivity extends AppCompatActivity {
 
         metadataRetriever = new FFmpegMediaMetadataRetriever();
         metadataRetriever.setDataSource(f.getPath());
+        showFrameAt(1);
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        mDetector.onTouchEvent(event);
+        return super.onTouchEvent(event);
     }
 
     @Override
@@ -115,14 +97,7 @@ public class SwiperActivity extends AppCompatActivity {
 //                    touch_up();
                     break;
             }
-
-//            if (ev.getAction() == MotionEvent.ACTION_MOVE) {
-//                //if move event occurs
-//                testerTv.setText("AA");
-
-//            listview.dispatchTouchEvent(motionEvent); //send event to listview
-            return true;
-//            }
+//            return false;
         }
         return super.dispatchTouchEvent(ev);
     }
@@ -143,19 +118,20 @@ public class SwiperActivity extends AppCompatActivity {
 
     private float mX, mY;
     private static long delta = 5_000;
-    private static float TOUCH_TOLERANCE = 0.5f;
+    private static float TOUCH_TOLERANCE = 0.01f;
     private static float SPEED = 1000f;
 
     private void touch_start(float x, float y) {
         mX = x;
         mY = y;
     }
+
     private void touch_move(float x, float y) {
         float dx = Math.abs(x - mX);
         float dy = Math.abs(y - mY);
         if (dx >= TOUCH_TOLERANCE || dy >= TOUCH_TOLERANCE) {
             long d = delta;
-            d = (long)((((SPEED * dx)/d)+1) * d);
+            d = (long) ((((SPEED * dx) / d) + 1) * d);
             if (x >= mX) {
                 // moving finger to right
                 d = -d;
@@ -163,7 +139,8 @@ public class SwiperActivity extends AppCompatActivity {
                 // moving finger to left
                 // OK
             }
-            d = d/100*100;
+//            It's kinda like a density
+//            d = d / 100 * 100;
             showFrameAt(d);
             mX = x;
             mY = y;
@@ -171,17 +148,40 @@ public class SwiperActivity extends AppCompatActivity {
     }
 
     private void showFrameAt(final long d) {
-        Bitmap bitmap = metadataRetriever.getFrameAtTime(mCurrent + d,
-               FFmpegMediaMetadataRetriever.OPTION_CLOSEST);
-        if (bitmap != null) {
-            mImageView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-            mImageView.setImageBitmap(bitmap);
-//                glide.asBitmap().load(bitmap)
-//                        .apply(requestOptions)
-//                        .into(mImageView);
+//            It's kinda like a density
+        long time = (mCurrent + d) / 50000L * 50000L;
+
+        final Bitmap bmpFromCache = mCache.get(time);
+        if (bmpFromCache == null) {
+            Bitmap bitmap = metadataRetriever.getFrameAtTime(time,
+                    FFmpegMediaMetadataRetriever.OPTION_CLOSEST);
+            if (bitmap != null) {
+                mCache.put(time, bitmap);
+                loadBitmapIntoImage(bitmap);
+                mCurrent += d;
+//                Log.d("HEHERE", String.format("showFrameAt%09d: Not from cache/nCurrent=%09d", time, mCurrent));
+            }
+        } else {
+            loadBitmapIntoImage(bmpFromCache);
             mCurrent += d;
-            new Handler(getMainLooper()).post(() -> mImageView.setLayerType(View.LAYER_TYPE_NONE, null));
+//            Log.d("HEHERE", String.format("showFrameAt%09d: Loaded from cache/nCurrent=%09d", time, mCurrent));
         }
+
     }
 
+    private void loadBitmapIntoImage(Bitmap bitmap) {
+        mImageView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        mImageView.setImageBitmap(bitmap);
+        new Handler(getMainLooper()).post(() ->
+                mImageView.setLayerType(View.LAYER_TYPE_NONE, null));
+    }
+
+    private class MyGestureListener extends GestureDetector.SimpleOnGestureListener {
+
+        @Override
+        public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+            Log.d("HEHERE", "onFling: velocityX=" + velocityX);
+            return super.onFling(e1, e2, velocityX, velocityY);
+        }
+    }
 }
