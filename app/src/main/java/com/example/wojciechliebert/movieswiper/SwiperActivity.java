@@ -43,6 +43,8 @@ public class SwiperActivity extends AppCompatActivity {
     private GestureDetectorCompat mDetector;
 
     private LruCache<Long, Bitmap> mCache;
+    private long videoDuration;
+    private static long FRAME_REQUEST_DENSITY = 50000L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,9 +54,9 @@ public class SwiperActivity extends AppCompatActivity {
         ButterKnife.bind(this);
 
         mDetector = new GestureDetectorCompat(this, new MyGestureListener());
-        mCache = new LruCache<Long, Bitmap>(500);
+        mCache = new LruCache<>(500);
 
-        File f = new File(getCacheDir()+"/out1.mp4");
+        File f = new File(getCacheDir()+"/out2.webm");
         if (!f.exists()) try {
 
             InputStream is = getResources().openRawResource(R.raw.out1);
@@ -73,6 +75,23 @@ public class SwiperActivity extends AppCompatActivity {
         metadataRetriever = new FFmpegMediaMetadataRetriever();
         metadataRetriever.setDataSource(f.getPath());
         showFrameAt(1);
+
+        String time = metadataRetriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_DURATION);
+        videoDuration = Integer.parseInt(time) * 1000; // milliseconds to microseconds
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                for (long i = 0; i < videoDuration; i += FRAME_REQUEST_DENSITY) {
+                    if (mCache.get(i) == null) {
+                        mCache.put(i, metadataRetriever.getFrameAtTime(i,
+                                FFmpegMediaMetadataRetriever.OPTION_CLOSEST));
+                    }
+//                    synchronized (mCache) {
+//                    }
+                }
+            }
+        }).start();
+
     }
 
     @Override
@@ -148,15 +167,20 @@ public class SwiperActivity extends AppCompatActivity {
     }
 
     private void showFrameAt(final long d) {
-//            It's kinda like a density
-        long time = (mCurrent + d) / 50000L * 50000L;
-
+        long time = (mCurrent + d) / FRAME_REQUEST_DENSITY * FRAME_REQUEST_DENSITY;
+        if (time - FRAME_REQUEST_DENSITY > videoDuration) {
+            return;
+//            mCurrent -= 100_000; //
+//            showFrameAt(0);
+        }
         final Bitmap bmpFromCache = mCache.get(time);
         if (bmpFromCache == null) {
             Bitmap bitmap = metadataRetriever.getFrameAtTime(time,
                     FFmpegMediaMetadataRetriever.OPTION_CLOSEST);
             if (bitmap != null) {
                 mCache.put(time, bitmap);
+//                synchronized (mCache) {
+//                }
                 loadBitmapIntoImage(bitmap);
                 mCurrent += d;
 //                Log.d("HEHERE", String.format("showFrameAt%09d: Not from cache/nCurrent=%09d", time, mCurrent));
