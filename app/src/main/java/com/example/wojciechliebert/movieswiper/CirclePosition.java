@@ -5,19 +5,26 @@ package com.example.wojciechliebert.movieswiper;
  */
 
 class CirclePosition {
-//    public T time;
+    public final CircleMessage message;
     public float x;
     public float y;
     public int state;
 
     public CirclePosition(float x, float y, int state) {
-//        time = t;
         this.x = x;
         this.y = y;
         this.state = state;
+        this.message = null;
     }
 
-    public class CircleState {
+    public CirclePosition(float x, float y, int state, CircleMessage message) {
+        this.x = x;
+        this.y = y;
+        this.state = state;
+        this.message = message;
+    }
+
+    public static class CircleState {
         public static final int SHOW = 1;
         public static final int HIDE = 0;
     }

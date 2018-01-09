@@ -11,6 +11,7 @@ import android.support.animation.FlingAnimation;
 import android.support.animation.FloatValueHolder;
 import android.support.annotation.NonNull;
 import android.support.annotation.RawRes;
+import android.support.constraint.ConstraintLayout;
 import android.support.v4.view.GestureDetectorCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.RecyclerView;
@@ -24,7 +25,6 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.widget.VideoView;
 
 import java.io.File;
@@ -61,6 +61,15 @@ public class SwiperActivity extends AppCompatActivity {
     @BindView(R.id.open_cam_button)
     Button mOpenCamBtn;
 
+    @BindView(R.id.info_cl)
+    ConstraintLayout mInfoCl;
+
+    @BindView(R.id.info_header)
+    TextView mInfoHeader;
+
+    @BindView(R.id.info_body)
+    TextView mInfoBody;
+
     FFmpegMediaMetadataRetriever metadataRetriever;
     private long mCurrentTime;
     private ImageView mCircle;
@@ -78,7 +87,7 @@ public class SwiperActivity extends AppCompatActivity {
     private GestureDetectorCompat mDetector;
 
     private LruCache<Long, Bitmap> mCache;
-    private TreeMap<Long, CirclePosition> mMarkPosition;
+    private TreeMap<Long, CirclePosition> mMarkPositions;
     private long videoDuration;
     private long FRAME_REQUEST_DENSITY = 50000L;
     private Uri mVideoUri;
@@ -98,7 +107,19 @@ public class SwiperActivity extends AppCompatActivity {
         mCircle.setY(20);
 //        iv.setBackgroundColor(getResources().getColor(R.color.colorTransparent));
         mCircle.setOnClickListener(view -> {
-            Toast.makeText(getApplicationContext(), "AAAAAAAA", Toast.LENGTH_SHORT).show();
+            final Map.Entry<Long, CirclePosition> floorEntry = mMarkPositions.floorEntry(mCurrentTime);
+            Long key = floorEntry.getKey();
+            CircleMessage message = floorEntry.getValue().message;
+            while (message == null) {
+                if (key != null) {
+                    key = mMarkPositions.lowerKey(key);
+                }
+                message = mMarkPositions.floorEntry(key).getValue().message;
+            }
+            mInfoCl.setVisibility(View.VISIBLE);
+            mInfoHeader.setText(message.header);
+            mInfoBody.setText(message.body);
+//            Toast.makeText(getApplicationContext(), String.format("%s\n%s", header, body), Toast.LENGTH_SHORT).show();
         });
 //        Glide.with(this)
 //                .load(R.drawable.circle)
@@ -168,26 +189,32 @@ public class SwiperActivity extends AppCompatActivity {
     }
 
     private void createMarkPositionMap() {
-        mMarkPosition = new TreeMap<>();
-        mMarkPosition.put(0L, new CirclePosition(0f, 0f, CirclePosition.CircleState.HIDE));
-        mMarkPosition.put(800000L, new CirclePosition(300f, 600f, CirclePosition.CircleState.SHOW));
-        mMarkPosition.put(2000000L, new CirclePosition(100f, 300f, CirclePosition.CircleState.SHOW));
-        mMarkPosition.put(2700000L, new CirclePosition(300f, 250f, CirclePosition.CircleState.HIDE));
-        mMarkPosition.put(videoDuration, new CirclePosition(0f, 0f, CirclePosition.CircleState.HIDE));
-
+        mMarkPositions = new TreeMap<>();
+        mMarkPositions.put(0L, new CirclePosition(0f, 0f, CirclePosition.CircleState.HIDE,
+                new CircleMessage("STUB", "STUB")));
+        mMarkPositions.put(800000L, new CirclePosition(300f, 600f, CirclePosition.CircleState.SHOW,
+                new CircleMessage("Tiliwizor", getString(R.string.lorem_ipsum))));
+        mMarkPositions.put(2000000L, new CirclePosition(100f, 300f, CirclePosition.CircleState.SHOW));
+        mMarkPositions.put(2700000L, new CirclePosition(300f, 250f, CirclePosition.CircleState.HIDE));
+        mMarkPositions.put(4000000L, new CirclePosition(900f, 200f, CirclePosition.CircleState.SHOW,
+                new CircleMessage("GWIATEG", getString(R.string.lorem_ipsum))));
+        mMarkPositions.put(4800000L, new CirclePosition(870f, 200f, CirclePosition.CircleState.SHOW));
+        mMarkPositions.put(5000000L, new CirclePosition(500f, 450f, CirclePosition.CircleState.SHOW));
+        mMarkPositions.put(videoDuration, new CirclePosition(0f, 0f, CirclePosition.CircleState.HIDE));
     }
 
     private void updateCirclePosition(long time) {
         if (time < 0) {
             time = 0;
         }
-        final Map.Entry<Long, CirclePosition> prevKey = mMarkPosition.floorEntry(time);
+        final Map.Entry<Long, CirclePosition> prevKey = mMarkPositions.floorEntry(time);
         final CirclePosition prevPos = prevKey.getValue();
-        final Map.Entry<Long, CirclePosition> nextKey = mMarkPosition.ceilingEntry(time);
+        final Map.Entry<Long, CirclePosition> nextKey = mMarkPositions.ceilingEntry(time);
         final CirclePosition nextPos = nextKey.getValue();
 
         if (prevPos.state == CirclePosition.CircleState.HIDE) {
             mCircle.setVisibility(View.GONE);
+            mInfoCl.setVisibility(View.GONE);
         }
         if (prevPos.state == CirclePosition.CircleState.SHOW) {
             if (nextPos.state == CirclePosition.CircleState.SHOW) {
@@ -204,7 +231,6 @@ public class SwiperActivity extends AppCompatActivity {
             }
             mCircle.setVisibility(View.VISIBLE);
         }
-        return;
     }
 
     private Long getPreviousEntry(NavigableMap<Long, Object> map, Long key) {

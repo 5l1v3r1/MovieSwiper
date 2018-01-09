@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">MovieSwiper</string>
     <string name="interact">Interact</string>
+    <string name="lorem_ipsum">Lorem ipsum dolor sit amet, consectetur adipiscing elit. In malesuada finibus mi sed finibus. In hac habitasse platea dictumst. Donec auctor mattis nisl vitae vulputate. Mauris iaculis semper convallis. Integer tincidunt massa nec vehicula consectetur. Etiam tristique vulputate malesuada. In sapien ante, condimentum at mauris vel, hendrerit porttitor velit.</string>
 </resources>
