@@ -218,11 +218,16 @@ public class SwiperActivity extends AppCompatActivity {
         mMarkPositions.put(800000L, new CirclePosition(300f, 600f, CirclePosition.CircleState.SHOW,
                 new CircleMessage("Tiliwizor", getString(R.string.lorem_ipsum))));
         mMarkPositions.put(2000000L, new CirclePosition(100f, 300f, CirclePosition.CircleState.SHOW));
-        mMarkPositions.put(2700000L, new CirclePosition(300f, 250f, CirclePosition.CircleState.HIDE));
+        mMarkPositions.put(2700000L, new CirclePosition(100f, 300f, CirclePosition.CircleState.HIDE));
         mMarkPositions.put(4000000L, new CirclePosition(900f, 200f, CirclePosition.CircleState.SHOW,
                 new CircleMessage("GWIATEG", getString(R.string.lorem_ipsum))));
-        mMarkPositions.put(4800000L, new CirclePosition(870f, 200f, CirclePosition.CircleState.SHOW));
+        mMarkPositions.put(4500000L, new CirclePosition(600f, 400f, CirclePosition.CircleState.SHOW));
+        mMarkPositions.put(4800000L, new CirclePosition(550f, 450f, CirclePosition.CircleState.SHOW));
         mMarkPositions.put(5000000L, new CirclePosition(500f, 450f, CirclePosition.CircleState.SHOW));
+        mMarkPositions.put(5800000L, new CirclePosition(500f, 480f, CirclePosition.CircleState.SHOW));
+        mMarkPositions.put(6700000L, new CirclePosition(400f, 480f, CirclePosition.CircleState.SHOW));
+        mMarkPositions.put(7200000L, new CirclePosition(100f, 480f, CirclePosition.CircleState.SHOW));
+        mMarkPositions.put(7200001L, new CirclePosition(100f, 480f, CirclePosition.CircleState.HIDE));
         mMarkPositions.put(videoDuration, new CirclePosition(0f, 0f, CirclePosition.CircleState.HIDE));
     }
 
@@ -232,7 +237,10 @@ public class SwiperActivity extends AppCompatActivity {
         }
         final Map.Entry<Long, CirclePosition> prevKey = mMarkPositions.floorEntry(time);
         final CirclePosition prevPos = prevKey.getValue();
-        final Map.Entry<Long, CirclePosition> nextKey = mMarkPositions.ceilingEntry(time);
+        Map.Entry<Long, CirclePosition> nextKey = mMarkPositions.ceilingEntry(time);
+        if (nextKey == null) {
+            nextKey = prevKey;
+        }
         final CirclePosition nextPos = nextKey.getValue();
 
         if (prevPos.state == CirclePosition.CircleState.HIDE) {
@@ -240,18 +248,14 @@ public class SwiperActivity extends AppCompatActivity {
             mInfoCl.setVisibility(View.GONE);
         }
         if (prevPos.state == CirclePosition.CircleState.SHOW) {
-            if (nextPos.state == CirclePosition.CircleState.SHOW) {
-                float tp = (float)(mCurrentTime - prevKey.getKey()) / (nextKey.getKey() - prevKey.getKey());
-                float dx = nextPos.x - prevPos.x;
-                float dy = nextPos.y - prevPos.y;
-                final float newX = prevPos.x + tp * dx;
-                final float newY = prevPos.y + tp * dy;
-                mCircle.setX(newX);
-                mCircle.setY(newY);
-            } else {
-                mCircle.setX(prevPos.x);
-                mCircle.setY(prevPos.y);
-            }
+            float tp = (float)(time - prevKey.getKey()) / (nextKey.getKey() - prevKey.getKey());
+            float dx = nextPos.x - prevPos.x;
+            float dy = nextPos.y - prevPos.y;
+            final float newX = prevPos.x + tp * dx;
+            final float newY = prevPos.y + tp * dy;
+            mCircle.setX(newX);
+            mCircle.setY(newY);
+
             mCircle.setVisibility(View.VISIBLE);
         }
     }
