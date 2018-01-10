@@ -1,6 +1,7 @@
 package com.example.wojciechliebert.movieswiper;
 
 import android.animation.ValueAnimator;
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
@@ -30,13 +31,22 @@ import android.widget.VideoView;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
+import rx.Observable;
+import rx.Subscription;
+import rx.schedulers.Schedulers;
 import wseemann.media.FFmpegMediaMetadataRetriever;
 
 public class SwiperActivity extends AppCompatActivity {
@@ -92,6 +102,10 @@ public class SwiperActivity extends AppCompatActivity {
     private long FRAME_REQUEST_DENSITY = 50000L;
     private Uri mVideoUri;
     private FlingAnimation flingAnimation;
+    private Subscription subscription;
+    private int partitionSize = 3;
+    private Observable<Map<Long, Bitmap>> observable;
+    private AtomicInteger currentThreadsNumber;
 
     private void addCircle() {
         ViewGroup layout = rootLayout;
@@ -154,18 +168,20 @@ public class SwiperActivity extends AppCompatActivity {
 //        FRAME_REQUEST_DENSITY = TimeUnit.SECONDS.toMicros(1) /
 //                Integer.parseInt(metadataRetriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_FRAMERATE));
         FRAME_REQUEST_DENSITY = TimeUnit.SECONDS.toMicros(1) / 24;
-        new Thread(() -> {
-            for (long i = 0; (i < videoDuration) && (i < 7791542); i += FRAME_REQUEST_DENSITY) {
-                if (mCache.get(i) == null) {
-                    mCache.put(i, metadataRetriever.getFrameAtTime(i,
-                            FFmpegMediaMetadataRetriever.OPTION_CLOSEST));
-                    Log.d("Loading in bg", String.format("onCreate: i:%d, cache size:%d", i, mCache.size()));
-                }
-//                synchronized (mCache) {
+//        new Thread(() -> {
+//            for (long i = 0; (i < videoDuration) && (i < 7791542); i += FRAME_REQUEST_DENSITY) {
+//                if (mCache.get(i) == null) {
+//                    mCache.put(i, metadataRetriever.getFrameAtTime(i,
+//                            FFmpegMediaMetadataRetriever.OPTION_CLOSEST));
+//                    Log.d("Loading in bg", String.format("onCreate: i:%d, cache size:%d", i, mCache.size()));
 //                }
-            }
-            Log.d("A", "DONE");
-        }).start();
+////                synchronized (mCache) {
+////                }
+//            }
+//            Log.d("A", "DONE");
+//        }).start();
+        calculateVidLengthAndFps();
+        createObservable();
 
         createMarkPositionMap();
         addCircle();
@@ -187,6 +203,12 @@ public class SwiperActivity extends AppCompatActivity {
 //            e.printStackTrace();
 //        }
 
+    }
+
+    private void calculateVidLengthAndFps() {
+        String time = metadataRetriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_DURATION);
+        videoDuration = TimeUnit.MILLISECONDS.toMicros(Integer.parseInt(time));
+        FRAME_REQUEST_DENSITY = TimeUnit.SECONDS.toMicros(1) / 24;
     }
 
     private void createMarkPositionMap() {
@@ -429,4 +451,88 @@ public class SwiperActivity extends AppCompatActivity {
 //            return super.onFling(e1, e2, velocityX, velocityY);
         }
     }
+
+    final int threadPoolSize = Runtime.getRuntime().availableProcessors() + 1;
+    ExecutorService threadPoolExecutor = Executors.newFixedThreadPool(threadPoolSize);
+
+    public static void log(String msg) {
+        String threadName = Thread.currentThread().getName();
+        System.out.println(String.format("%s - %s", threadName, msg));
+    }
+
+    @SuppressLint("DefaultLocale")
+    private void createObservable() {
+
+        List<List<Long>> inputs = partitionVideo();
+
+        currentThreadsNumber = new AtomicInteger(0);
+
+        observable = Observable.from(inputs)
+//                .observeOn(Schedulers.computation())
+                .flatMap((in) ->
+                        Observable.defer(() -> {
+                            while (!(currentThreadsNumber.get() <= threadPoolSize)) { /*wait*/ }
+                            log(String.format("Starting from: %d, n. of threads: %d", in.get(0), currentThreadsNumber.get()));
+                            currentThreadsNumber.incrementAndGet();
+                            return Observable.just(in);
+                        }).subscribeOn(Schedulers.from(threadPoolExecutor))
+                                .map(this::doHeavyWeightStuff))
+                .subscribeOn(Schedulers.computation())
+                .doOnError((e) -> {
+                    log("error:\n");
+                    e.printStackTrace();
+                });
+        subscription = subscribeToBeginLoading();
+
+    }
+
+    private Subscription subscribeToBeginLoading() {
+        return observable
+                .subscribe((lis) -> {
+                    currentThreadsNumber.decrementAndGet();
+                    log(String.format("Done, n. of threads: %d", currentThreadsNumber.get()));
+                    synchronized (mCache) {
+                        for (long key : lis.keySet()) {
+                            final Bitmap bitmap = lis.get(key);
+                            if (bitmap != null) {
+                                mCache.put(key, bitmap);
+                                Log.d("INS", String.format("subscribe: null bitmap at %d", key));
+                            }
+                            Log.d("INS", String.format("subscribe: inserted at %d", key));
+                        }
+                    }
+                });
+    }
+
+    @NonNull
+    private List<List<Long>> partitionVideo() {
+        List<Long> frameTimes = new LinkedList<>();
+        for (long i = 0; (i < videoDuration); i += FRAME_REQUEST_DENSITY) {
+            frameTimes.add(i);
+        }
+        List<List<Long>> inputs = new LinkedList<>();
+        for (int i = 0; i < frameTimes.size(); i += partitionSize) {
+            inputs.add(frameTimes.subList(i,
+                    Math.min(i + partitionSize, frameTimes.size())));
+        }
+        return inputs;
+    }
+
+    private  Map<Long, Bitmap> doHeavyWeightStuff(List<Long> input) {
+        Map<Long, Bitmap> toRet = new LinkedHashMap<>();
+        for (long key : input) {
+            toRet.put(key, metadataRetriever.getFrameAtTime(key,
+                    FFmpegMediaMetadataRetriever.OPTION_CLOSEST));
+            Log.d("Loading in bg",
+                    String.format("onCreate: i:%d(%d), cache size:%d, my part is %d of %d",
+                            key,
+                            TimeUnit.MICROSECONDS.toMillis(key),
+                            mCache.size(),
+                            toRet.keySet().size(),
+                            input.size()));
+            log("loadnig in bg...");
+        }
+        return toRet;
+    }
+
 }

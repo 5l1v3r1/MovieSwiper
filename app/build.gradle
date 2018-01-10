@@ -45,6 +45,8 @@ dependencies {
     apply plugin: 'com.android.application' //or apply plugin: 'java'
     apply plugin: 'me.tatarka.retrolambda'
 
+    implementation 'io.reactivex:rxjava:1.3.4'
+
 //    implementation 'com.github.wseemann:FFmpegMediaMetadataRetriever:1.0.14'
 //    implementation 'com.github.wseemann:FFmpegMediaMetadataRetriever-x86:1.0.14'
     implementation (name:'all-fmmr', ext:'aar')
