@@ -126,6 +126,7 @@ public class SwiperActivity extends AppCompatActivity {
 //                .into(mCircle);
         mCircle.setImageResource(R.drawable.ic_circle1);
         layout.addView(mCircle);
+        mCircle.setVisibility(View.GONE);
     }
 
     @Override
